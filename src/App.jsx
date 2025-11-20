@@ -3,7 +3,8 @@ import {
   Film, Popcorn, Ticket, Shuffle, Info, Star, Calendar, Key, 
   Clapperboard, AlertCircle, TrendingUp, Search, X, 
   ExternalLink, Clock, DollarSign, Eye, EyeOff, Heart,
-  ChevronLeft, Play, Trash2, Menu
+  ChevronLeft, Play, Trash2, Menu, History, Trophy, 
+  Sword, Smile, Ghost
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -31,13 +32,22 @@ const createApi = (apiKey) => {
     searchMovie: (query, page=1) => fetchT('/search/movie', { query, page }),
     searchPerson: (query, page=1) => fetchT('/search/person', { query, page }),
     getPerson: (id) => fetchT(`/person/${id}`, { append_to_response: 'movie_credits,images' }),
+    
+    // Standard Lists
     getTrending: (timeWindow = 'day') => fetchT(`/trending/movie/${timeWindow}`),
     getNowPlaying: (page=1) => fetchT('/movie/now_playing', { page }),
     getUpcoming: (page=1) => fetchT('/movie/upcoming', { page, region: 'US' }),
+    
+    // Custom Curated Lists
     getTopRatedIndia: () => fetchT('/discover/movie', { 
       region: 'IN', sort_by: 'vote_average.desc', 'vote_count.gte': 200,
       'primary_release_date.gte': new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0]
     }),
+    getTopRated: () => fetchT('/movie/top_rated', { page: 1 }),
+    getActionMovies: () => fetchT('/discover/movie', { with_genres: 28, sort_by: 'popularity.desc' }),
+    getComedyMovies: () => fetchT('/discover/movie', { with_genres: 35, sort_by: 'popularity.desc' }),
+    getHorrorMovies: () => fetchT('/discover/movie', { with_genres: 27, sort_by: 'popularity.desc' }),
+
     getCollection: (id) => fetchT(`/collection/${id}`),
   };
 };
@@ -87,6 +97,55 @@ const Badge = ({ children, className = "" }) => (
   <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border ${className}`}>
     {children}
   </span>
+);
+
+// Reusable Card with Quick Actions
+const MovieGridCard = ({ movie, onClick, toggleWatchlist, isWatchlisted, toggleSeen, isSeen, className = "" }) => (
+  <div className={`group relative flex-shrink-0 cursor-pointer ${className}`}>
+    <div onClick={() => onClick(movie.id)} className="relative overflow-hidden rounded-xl bg-slate-900 border border-slate-800 shadow-lg">
+      <Poster path={movie.poster_path} size="w500" className="aspect-[2/3] transition-transform duration-300 group-hover:scale-105" alt={movie.title} />
+      
+      {/* Hover Overlay Background */}
+      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300" />
+
+      {/* Quick Actions */}
+      <div className="absolute top-2 right-2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+        <button 
+          onClick={(e) => { e.stopPropagation(); toggleWatchlist(movie); }}
+          className={`p-2 rounded-full backdrop-blur-md shadow-lg border border-white/10 transition-all hover:scale-110 active:scale-95
+            ${isWatchlisted ? 'bg-red-600 text-white' : 'bg-black/60 text-white hover:bg-red-600'}`}
+          title={isWatchlisted ? "Remove from Watchlist" : "Add to Watchlist"}
+        >
+          <Heart className={`w-4 h-4 ${isWatchlisted ? 'fill-current' : ''}`} />
+        </button>
+        <button 
+          onClick={(e) => { e.stopPropagation(); toggleSeen(movie); }}
+          className={`p-2 rounded-full backdrop-blur-md shadow-lg border border-white/10 transition-all hover:scale-110 active:scale-95
+            ${isSeen ? 'bg-green-600 text-white' : 'bg-black/60 text-white hover:bg-green-600'}`}
+          title={isSeen ? "Mark as Unseen" : "Mark as Seen"}
+        >
+          {isSeen ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+        </button>
+      </div>
+      
+      {/* Seen Badge (Always visible if seen) */}
+      {isSeen && (
+        <div className="absolute top-2 left-2 bg-green-600/90 backdrop-blur text-white text-[10px] font-bold px-2 py-1 rounded shadow-lg border border-green-400/30">
+          SEEN
+        </div>
+      )}
+    </div>
+
+    <div className="mt-2 px-1" onClick={() => onClick(movie.id)}>
+      <h4 className="text-sm font-medium text-slate-200 line-clamp-1 group-hover:text-white transition-colors">{movie.title}</h4>
+      <div className="flex items-center justify-between text-xs text-slate-500 mt-1">
+        <span>{movie.release_date?.split('-')[0] || 'N/A'}</span>
+        <span className="flex items-center gap-1 text-amber-500 font-medium">
+          <Star className="w-3 h-3 fill-current" /> {movie.vote_average?.toFixed(1)}
+        </span>
+      </div>
+    </div>
+  </div>
 );
 
 const WatchlistDrawer = ({ isOpen, onClose, watchlist, onRemove, onMovieClick }) => {
@@ -150,7 +209,6 @@ const PickerView = ({ api, onMovieClick, seenHistory, markSeen, watchlist, toggl
         setSuggestedMovie(null);
 
         try {
-            // Fetch a random page (1-20) to ensure high popularity but some variety
             const randomPage = Math.floor(Math.random() * 20) + 1;
             const res = await api.discoverMovie({
                 with_genres: selectedGenre.id,
@@ -160,14 +218,14 @@ const PickerView = ({ api, onMovieClick, seenHistory, markSeen, watchlist, toggl
                 language: 'en-US'
             });
 
-            // Client-side filtering of "Seen" movies
-            const candidates = res.results.filter(m => !seenHistory.includes(m.id));
+            const candidates = res.results.filter(m => 
+                !seenHistory.some(seen => typeof seen === 'object' ? seen.id === m.id : seen === m.id)
+            );
             
             if (candidates.length > 0) {
                 const randomIdx = Math.floor(Math.random() * candidates.length);
                 setSuggestedMovie(candidates[randomIdx]);
             } else {
-                // Fallback if user has seen everything on this page (unlikely but possible)
                 setError("You've seen a lot of these! Try spinning again.");
             }
         } catch (e) {
@@ -188,7 +246,6 @@ const PickerView = ({ api, onMovieClick, seenHistory, markSeen, watchlist, toggl
                 <p className="text-slate-400">Select a genre and let fate decide.</p>
             </div>
 
-            {/* Genre Cloud */}
             <div className="flex flex-wrap justify-center gap-2 mb-10">
                 {genres.map(g => (
                     <button
@@ -201,7 +258,6 @@ const PickerView = ({ api, onMovieClick, seenHistory, markSeen, watchlist, toggl
                 ))}
             </div>
 
-            {/* Result Area */}
             <div className="min-h-[400px] flex flex-col items-center justify-center relative">
                 {loading ? (
                     <div className="flex flex-col items-center animate-pulse">
@@ -240,7 +296,7 @@ const PickerView = ({ api, onMovieClick, seenHistory, markSeen, watchlist, toggl
                                     <Heart className={`w-4 h-4 ${isWatchlisted ? 'fill-current' : ''}`} /> {isWatchlisted ? 'Saved' : 'Save'}
                                 </button>
                                 <button 
-                                    onClick={() => { markSeen(suggestedMovie.id); pickMovie(); }}
+                                    onClick={() => { markSeen(suggestedMovie); pickMovie(); }}
                                     className="py-3 rounded-lg font-medium border border-slate-600 text-slate-300 hover:bg-slate-800 transition-colors flex items-center justify-center gap-2"
                                 >
                                     <Eye className="w-4 h-4" /> Mark Seen & Next
@@ -258,7 +314,6 @@ const PickerView = ({ api, onMovieClick, seenHistory, markSeen, watchlist, toggl
                 {error && <div className="absolute bottom-0 text-red-400 bg-red-900/20 px-4 py-2 rounded border border-red-900/50">{error}</div>}
             </div>
 
-            {/* Big Action Button */}
             {selectedGenre && (
                 <button 
                     onClick={pickMovie}
@@ -271,6 +326,47 @@ const PickerView = ({ api, onMovieClick, seenHistory, markSeen, watchlist, toggl
             )}
         </div>
     );
+};
+
+const SeenView = ({ seenHistory, onMovieClick, onRemove }) => {
+  return (
+    <div className="animate-fade-in-up pb-20 w-full max-w-5xl mx-auto">
+      <div className="mb-8">
+          <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
+            <Eye className="w-8 h-8 text-green-500" /> Seen History
+          </h2>
+          <p className="text-slate-400">Movies you've marked as watched.</p>
+      </div>
+
+      {seenHistory.length === 0 ? (
+          <div className="text-center text-slate-600 py-20">
+              <Film className="w-16 h-16 mx-auto mb-4 opacity-20" />
+              <p className="text-lg">You haven't marked any movies as seen yet.</p>
+          </div>
+      ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+            {seenHistory.filter(m => typeof m === 'object').map(movie => (
+                <div key={movie.id} className="relative group bg-slate-900 rounded-xl overflow-hidden border border-slate-800 hover:border-green-500/50 transition-all hover:-translate-y-1">
+                    <div onClick={() => onMovieClick(movie.id)} className="cursor-pointer">
+                        <Poster path={movie.poster_path} size="w342" className="aspect-[2/3]" alt={movie.title} />
+                        <div className="p-3">
+                            <h4 className="text-sm font-bold text-white truncate">{movie.title}</h4>
+                            <p className="text-xs text-slate-500 truncate">{movie.release_date?.split('-')[0]}</p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onRemove(movie.id); }}
+                        className="absolute top-2 right-2 bg-black/60 text-slate-300 p-1.5 rounded-full hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Remove from History"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                </div>
+            ))}
+          </div>
+      )}
+    </div>
+  );
 };
 
 const MovieDetailView = ({ movieId, api, onBack, onPersonClick, onMovieClick, onCollectionClick, watchlist, toggleWatchlist, seenHistory, markSeen, unmarkSeen }) => {
@@ -288,7 +384,7 @@ const MovieDetailView = ({ movieId, api, onBack, onPersonClick, onMovieClick, on
   const trailer = movie.videos?.results?.find(v => v.type === 'Trailer' && v.site === 'YouTube');
   const director = movie.credits?.crew?.find(c => c.job === 'Director');
   const isWatchlisted = watchlist.some(m => m.id === movie.id);
-  const isSeen = seenHistory.includes(movie.id);
+  const isSeen = seenHistory.some(m => typeof m === 'object' ? m.id === movie.id : m === movie.id);
 
   return (
     <div className="animate-fade-in-up pb-20">
@@ -309,7 +405,7 @@ const MovieDetailView = ({ movieId, api, onBack, onPersonClick, onMovieClick, on
                 <Heart className={`w-5 h-5 ${isWatchlisted ? 'fill-current' : ''}`} />
             </button>
             <button 
-                onClick={() => isSeen ? unmarkSeen(movie.id) : markSeen(movie.id)}
+                onClick={() => isSeen ? unmarkSeen(movie.id) : markSeen(movie)}
                 className={`p-3 rounded-full backdrop-blur-md border transition-all ${isSeen ? 'bg-green-600 text-white border-green-500' : 'bg-black/40 text-white border-white/10 hover:bg-black/60'}`}
                 title={isSeen ? "Mark as Unseen" : "Mark as Seen"}
             >
@@ -399,16 +495,142 @@ const MovieDetailView = ({ movieId, api, onBack, onPersonClick, onMovieClick, on
   );
 };
 
-const Dashboard = ({ api, onMovieClick }) => {
-  const [lists, setLists] = useState({ trending: [], nowPlaying: [], upcoming: [], indiaTop: [] });
+const CollectionView = ({ collectionId, api, onBack, onMovieClick, watchlist, toggleWatchlist, seenHistory, markSeen, unmarkSeen }) => {
+    const [collection, setCollection] = useState(null);
+    
+    useEffect(() => {
+        api.getCollection(collectionId).then(setCollection).catch(console.error);
+    }, [collectionId]);
+
+    if(!collection) return <div className="flex justify-center p-10"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>;
+
+    return (
+        <div className="animate-fade-in-up pb-20">
+            <button onClick={onBack} className="mb-4 flex items-center gap-2 text-slate-400 hover:text-white">
+                <ChevronLeft className="w-4 h-4" /> Back
+            </button>
+            <div className="relative rounded-2xl overflow-hidden mb-8 border border-slate-800">
+                <img src={`${IMG_BASE_URL}/original${collection.backdrop_path}`} className="w-full h-64 object-cover opacity-60" alt="" />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 to-transparent" />
+                <div className="absolute bottom-8 left-8">
+                    <h1 className="text-4xl font-bold text-white mb-2">{collection.name}</h1>
+                    <p className="text-slate-300 max-w-xl text-sm">{collection.overview}</p>
+                </div>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                {collection.parts.sort((a,b) => new Date(a.release_date) - new Date(b.release_date)).map(movie => {
+                    const isSeen = seenHistory.some(m => typeof m === 'object' ? m.id === movie.id : m === movie.id);
+                    return (
+                        <MovieGridCard
+                            key={movie.id}
+                            movie={movie}
+                            onClick={onMovieClick}
+                            toggleWatchlist={toggleWatchlist}
+                            isWatchlisted={watchlist.some(m => m.id === movie.id)}
+                            toggleSeen={() => isSeen ? unmarkSeen(movie.id) : markSeen(movie)}
+                            isSeen={isSeen}
+                        />
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+const PersonDetailView = ({ personId, api, onBack, onMovieClick }) => {
+  const [person, setPerson] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const data = await api.getPerson(personId);
+        setPerson(data);
+      } catch (e) { console.error(e); }
+      setLoading(false);
+    };
+    load();
+  }, [personId]);
+
+  if (loading) return <div className="flex justify-center p-10"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>;
+  if (!person) return null;
+
+  const sortedCredits = person.movie_credits?.cast?.sort((a, b) => b.popularity - a.popularity) || [];
+
+  return (
+    <div className="animate-fade-in-up pb-20">
+      <button onClick={onBack} className="mb-4 flex items-center gap-2 text-slate-400 hover:text-white">
+        <ChevronLeft className="w-4 h-4" /> Back
+      </button>
+
+      <div className="flex flex-col md:flex-row gap-8">
+        <div className="w-full md:w-64 flex-shrink-0">
+          <Poster path={person.profile_path} size="h632" className="rounded-xl shadow-2xl aspect-[2/3]" alt={person.name} />
+          <div className="mt-6 space-y-4">
+            <div className="bg-slate-900 p-4 rounded-lg border border-slate-800">
+              <h3 className="text-slate-400 text-xs font-bold uppercase mb-2">Personal Info</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-slate-500">Known For</span> <span>{person.known_for_department}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Gender</span> <span>{person.gender === 1 ? 'Female' : 'Male'}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Birthday</span> <span>{person.birthday}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Place of Birth</span> <span className="text-right">{person.place_of_birth}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1">
+          <h1 className="text-4xl font-bold text-white mb-4">{person.name}</h1>
+          {person.biography && (
+            <div className="mb-8">
+              <h3 className="text-lg font-bold text-white mb-2">Biography</h3>
+              <p className="text-slate-300 leading-relaxed text-sm whitespace-pre-line max-h-96 overflow-y-auto custom-scrollbar pr-2">
+                {person.biography}
+              </p>
+            </div>
+          )}
+
+          <h3 className="text-lg font-bold text-white mb-4">Filmography (Known For)</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {sortedCredits.slice(0, 15).map(movie => (
+              <div key={movie.id} onClick={() => onMovieClick(movie.id)} className="cursor-pointer group">
+                <Poster path={movie.poster_path} size="w342" className="rounded-lg aspect-[2/3] mb-2 group-hover:ring-2 ring-blue-500 transition-all" alt={movie.title} />
+                <h4 className="text-sm font-medium text-slate-200 truncate group-hover:text-white">{movie.title}</h4>
+                <p className="text-xs text-slate-500">{movie.character}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const Dashboard = ({ api, onMovieClick, watchlist, toggleWatchlist, seenHistory, markSeen, unmarkSeen }) => {
+  const [lists, setLists] = useState({ 
+    trending: [], nowPlaying: [], upcoming: [], indiaTop: [], 
+    topRated: [], action: [], comedy: [], horror: [] 
+  });
 
   useEffect(() => {
     const fetchAll = async () => {
         try {
-            const [t, n, u, i] = await Promise.all([
-                api.getTrending('day'), api.getNowPlaying(), api.getUpcoming(), api.getTopRatedIndia()
+            const [t, n, u, i, top, act, com, hor] = await Promise.all([
+                api.getTrending('day'), 
+                api.getNowPlaying(), 
+                api.getUpcoming(), 
+                api.getTopRatedIndia(),
+                api.getTopRated(),
+                api.getActionMovies(),
+                api.getComedyMovies(),
+                api.getHorrorMovies()
             ]);
-            setLists({ trending: t.results, nowPlaying: n.results, upcoming: u.results, indiaTop: i.results });
+            setLists({ 
+              trending: t.results, nowPlaying: n.results, upcoming: u.results, indiaTop: i.results,
+              topRated: top.results, action: act.results, comedy: com.results, horror: hor.results
+            });
         } catch (e) { console.error(e); }
     };
     fetchAll();
@@ -420,12 +642,21 @@ const Dashboard = ({ api, onMovieClick }) => {
             {Icon && <Icon className="w-5 h-5 text-red-500" />} {title}
         </h3>
         <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar scroll-pl-4">
-            {movies.map(m => (
-                <div key={m.id} onClick={() => onMovieClick(m.id)} className="min-w-[160px] w-[160px] md:min-w-[200px] md:w-[200px] cursor-pointer group relative">
-                    <Poster path={m.poster_path} size="w500" className="rounded-xl aspect-[2/3] shadow-lg mb-3 group-hover:ring-2 ring-red-500 transition-all" alt={m.title} />
-                    <h4 className="text-sm font-medium text-slate-200 line-clamp-2 leading-tight group-hover:text-white transition-colors">{m.title}</h4>
-                </div>
-            ))}
+            {movies.map(m => {
+                const isSeen = seenHistory.some(seen => typeof seen === 'object' ? seen.id === m.id : seen === m.id);
+                return (
+                    <MovieGridCard
+                        key={m.id}
+                        movie={m}
+                        onClick={onMovieClick}
+                        toggleWatchlist={toggleWatchlist}
+                        isWatchlisted={watchlist.some(w => w.id === m.id)}
+                        toggleSeen={() => isSeen ? unmarkSeen(m.id) : markSeen(m)}
+                        isSeen={isSeen}
+                        className="min-w-[160px] w-[160px] md:min-w-[200px] md:w-[200px]"
+                    />
+                );
+            })}
         </div>
     </div>
   );
@@ -434,13 +665,18 @@ const Dashboard = ({ api, onMovieClick }) => {
     <div className="animate-fade-in-up pb-20">
         <MovieRail title="Trending Today" movies={lists.trending} icon={TrendingUp} />
         <MovieRail title="Now In Theaters" movies={lists.nowPlaying} icon={Ticket} />
-        <MovieRail title="Coming Soon" movies={lists.upcoming} icon={Calendar} />
+        <MovieRail title="All-Time Top Rated" movies={lists.topRated} icon={Trophy} />
         <MovieRail title="Top Rated in India" movies={lists.indiaTop} icon={Clock} />
+        <MovieRail title="Coming Soon" movies={lists.upcoming} icon={Calendar} />
+        
+        <MovieRail title="Action Packed" movies={lists.action} icon={Sword} />
+        <MovieRail title="Laugh Out Loud" movies={lists.comedy} icon={Smile} />
+        <MovieRail title="Scares & Thrills" movies={lists.horror} icon={Ghost} />
     </div>
   );
 };
 
-const SearchPage = ({ api, onMovieClick, onPersonClick }) => {
+const SearchPage = ({ api, onMovieClick, onPersonClick, watchlist, toggleWatchlist, seenHistory, markSeen, unmarkSeen }) => {
   const [query, setQuery] = useState('');
   const [type, setType] = useState('movie'); 
   const debouncedQuery = useDebounce(query, 500);
@@ -485,15 +721,32 @@ const SearchPage = ({ api, onMovieClick, onPersonClick }) => {
       
       {loading ? <div className="text-center text-slate-500">Searching...</div> : (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-            {results.map(item => (
-                <div key={item.id} onClick={() => type === 'movie' ? onMovieClick(item.id) : onPersonClick(item.id)} className="cursor-pointer group bg-slate-900 rounded-xl overflow-hidden border border-slate-800 hover:border-red-500/50 transition-all hover:-translate-y-1">
-                    <Poster path={type === 'movie' ? item.poster_path : item.profile_path} size="w342" className="aspect-[2/3]" alt={item.name || item.title} />
-                    <div className="p-3">
-                        <h4 className="text-sm font-bold text-white truncate">{item.title || item.name}</h4>
-                        <p className="text-xs text-slate-500 truncate">{type === 'movie' ? item.release_date?.split('-')[0] : item.known_for_department}</p>
-                    </div>
-                </div>
-            ))}
+            {results.map(item => {
+                if (type === 'movie') {
+                    const isSeen = seenHistory.some(m => typeof m === 'object' ? m.id === item.id : m === item.id);
+                    return (
+                        <MovieGridCard
+                            key={item.id}
+                            movie={item}
+                            onClick={onMovieClick}
+                            toggleWatchlist={toggleWatchlist}
+                            isWatchlisted={watchlist.some(w => w.id === item.id)}
+                            toggleSeen={() => isSeen ? unmarkSeen(item.id) : markSeen(item)}
+                            isSeen={isSeen}
+                        />
+                    );
+                } else {
+                    return (
+                        <div key={item.id} onClick={() => onPersonClick(item.id)} className="cursor-pointer group bg-slate-900 rounded-xl overflow-hidden border border-slate-800 hover:border-red-500/50 transition-all hover:-translate-y-1">
+                            <Poster path={item.profile_path} size="w342" className="aspect-[2/3]" alt={item.name} />
+                            <div className="p-3">
+                                <h4 className="text-sm font-bold text-white truncate">{item.name}</h4>
+                                <p className="text-xs text-slate-500 truncate">{item.known_for_department}</p>
+                            </div>
+                        </div>
+                    );
+                }
+            })}
           </div>
       )}
     </div>
@@ -513,7 +766,7 @@ export default function App() {
   const [seenHistory, setSeenHistory] = useLocalStorage('movie-picker-seen', []);
 
   const api = useMemo(() => createApi(tmdbKey), [tmdbKey]);
-
+  
   const navigate = (newView, id = null) => {
     setHistory(prev => [...prev, { view, selectedId }]);
     setView(newView);
@@ -532,18 +785,21 @@ export default function App() {
     }
   };
 
-  // Helper functions passed down
   const toggleWatchlist = (movie) => {
     const exists = watchlist.find(m => m.id === movie.id);
     if (exists) setWatchlist(watchlist.filter(m => m.id !== movie.id));
     else setWatchlist([...watchlist, movie]);
   };
 
-  const markSeen = (id) => {
-    if (!seenHistory.includes(id)) setSeenHistory([...seenHistory, id]);
+  const markSeen = (movie) => {
+    const isAlreadySeen = seenHistory.some(m => typeof m === 'object' ? m.id === movie.id : m === movie.id);
+    if (!isAlreadySeen) {
+      setSeenHistory([...seenHistory, movie]);
+    }
   };
+
   const unmarkSeen = (id) => {
-    setSeenHistory(seenHistory.filter(sid => sid !== id));
+    setSeenHistory(seenHistory.filter(m => typeof m === 'object' ? m.id !== id : m !== id));
   };
 
   const NavItem = ({ icon: Icon, label, targetView }) => (
@@ -571,13 +827,14 @@ export default function App() {
       <div className="fixed bottom-0 left-0 w-full bg-slate-900/90 backdrop-blur-xl border-t border-slate-800 z-50 md:static md:w-64 md:h-screen md:border-r md:border-t-0 md:flex md:flex-col p-2 md:p-6">
         <div className="hidden md:flex items-center gap-3 mb-10 px-2">
             <div className="bg-red-600 p-2 rounded-lg"><Film className="w-6 h-6 text-white" /></div>
-            <h1 className="text-xl font-bold tracking-tight">Cine<span className="text-red-500">Verse</span></h1>
+            <h1 className="text-xl font-bold tracking-tight">Bucky<span className="text-red-500">Verse</span></h1>
         </div>
 
         <nav className="flex md:flex-col justify-around md:justify-start gap-1 md:gap-2 w-full">
             <NavItem icon={TrendingUp} label="Discover" targetView="dashboard" />
             <NavItem icon={Search} label="Search" targetView="search" />
             <NavItem icon={Shuffle} label="Surprise Me" targetView="picker" />
+            <NavItem icon={History} label="Seen It" targetView="seen" />
             
             <button 
                 onClick={() => setDrawerOpen(true)}
@@ -591,8 +848,29 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 p-4 md:p-8 overflow-y-auto min-h-screen md:h-screen custom-scrollbar">
-        {view === 'dashboard' && <Dashboard api={api} onMovieClick={id => navigate('detail', id)} />}
-        {view === 'search' && <SearchPage api={api} onMovieClick={id => navigate('detail', id)} onPersonClick={id => navigate('person', id)} />}
+        {view === 'dashboard' && (
+            <Dashboard 
+                api={api} 
+                onMovieClick={id => navigate('detail', id)}
+                watchlist={watchlist}
+                toggleWatchlist={toggleWatchlist}
+                seenHistory={seenHistory}
+                markSeen={markSeen}
+                unmarkSeen={unmarkSeen}
+            />
+        )}
+        {view === 'search' && (
+            <SearchPage 
+                api={api} 
+                onMovieClick={id => navigate('detail', id)} 
+                onPersonClick={id => navigate('person', id)}
+                watchlist={watchlist}
+                toggleWatchlist={toggleWatchlist}
+                seenHistory={seenHistory}
+                markSeen={markSeen}
+                unmarkSeen={unmarkSeen}
+            />
+        )}
         
         {view === 'picker' && (
             <PickerView 
@@ -603,6 +881,28 @@ export default function App() {
                 watchlist={watchlist}
                 toggleWatchlist={toggleWatchlist}
             />
+        )}
+
+        {view === 'seen' && (
+            <SeenView 
+                seenHistory={seenHistory}
+                onMovieClick={id => navigate('detail', id)}
+                onRemove={unmarkSeen}
+            />
+        )}
+
+        {view === 'collection' && (
+             <CollectionView 
+                collectionId={selectedId} 
+                api={api} 
+                onBack={goBack} 
+                onMovieClick={id => navigate('detail', id)} 
+                watchlist={watchlist}
+                toggleWatchlist={toggleWatchlist}
+                seenHistory={seenHistory}
+                markSeen={markSeen}
+                unmarkSeen={unmarkSeen}
+             />
         )}
         
         {view === 'detail' && (
@@ -618,6 +918,15 @@ export default function App() {
                 markSeen={markSeen}
                 unmarkSeen={unmarkSeen}
             />
+        )}
+        
+        {view === 'person' && (
+             <PersonDetailView 
+                personId={selectedId} 
+                api={api} 
+                onBack={goBack} 
+                onMovieClick={id => navigate('detail', id)} 
+             />
         )}
       </main>
 
