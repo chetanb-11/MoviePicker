@@ -4,7 +4,7 @@ import {
   Clapperboard, AlertCircle, TrendingUp, Search, X, 
   ExternalLink, Clock, DollarSign, Eye, EyeOff, Heart,
   ChevronLeft, Play, Trash2, Menu, History, Trophy, 
-  Sword, Smile, Ghost
+  Sword, Smile, Ghost, Tv
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -385,6 +385,9 @@ const MovieDetailView = ({ movieId, api, onBack, onPersonClick, onMovieClick, on
   const director = movie.credits?.crew?.find(c => c.job === 'Director');
   const isWatchlisted = watchlist.some(m => m.id === movie.id);
   const isSeen = seenHistory.some(m => typeof m === 'object' ? m.id === movie.id : m === movie.id);
+  
+  // Prioritize India (IN) providers, then fall back to US
+  const providers = movie['watch/providers']?.results?.IN?.flatrate || movie['watch/providers']?.results?.US?.flatrate;
 
   return (
     <div className="animate-fade-in-up pb-20">
@@ -473,6 +476,20 @@ const MovieDetailView = ({ movieId, api, onBack, onPersonClick, onMovieClick, on
         <div className="space-y-6">
              {/* Metadata Sidebar */}
             <div className="bg-slate-900 p-5 rounded-xl border border-slate-800 space-y-4">
+                {/* Streaming Providers */}
+                {providers && providers.length > 0 && (
+                   <div className="pb-4 mb-4 border-b border-slate-800">
+                       <h4 className="text-slate-500 text-xs font-bold uppercase mb-3 flex items-center gap-2">
+                           <Tv className="w-4 h-4" /> Stream Now
+                       </h4>
+                       <div className="flex flex-wrap gap-3">
+                           {providers.map(p => (
+                               <img key={p.provider_id} src={`${IMG_BASE_URL}/original${p.logo_path}`} className="w-10 h-10 rounded-lg shadow-lg" title={p.provider_name} alt={p.provider_name} />
+                           ))}
+                       </div>
+                   </div>
+                )}
+
                 <div>
                     <h4 className="text-slate-500 text-xs font-bold uppercase mb-1">Director</h4>
                     <p className="text-white font-medium">{director?.name || 'Unknown'}</p>
