@@ -1,7 +1,7 @@
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
 export const createApi = (apiKey) => {
-  
+
   // Smart Fetcher: Tries multiple ways to get data to bypass ISP blocks
   const fetchWithFallback = async (endpoint, params = {}) => {
     if (!apiKey) throw new Error("API Key missing");
@@ -15,7 +15,7 @@ export const createApi = (apiKey) => {
     // 2. Define Strategies (Priority Order)
     const strategies = [
       // Strategy A: Direct Connection (Fastest, works on Wi-Fi)
-      { name: 'Direct', url: targetUrl }, 
+      { name: 'Direct', url: targetUrl },
       // Strategy B: Primary Proxy (Bypasses simple DNS blocks)
       { name: 'Proxy A', url: `https://corsproxy.io/?${encodeURIComponent(targetUrl)}` },
       // Strategy C: Secondary Proxy (Backup if Proxy A is down/blocked)
@@ -36,7 +36,7 @@ export const createApi = (apiKey) => {
         if (res.ok) {
           return await res.json();
         }
-        
+
         // If unauthorized (401), the key is wrong, don't retry other proxies
         if (res.status === 401) throw new Error("Invalid API Key");
 
@@ -55,18 +55,19 @@ export const createApi = (apiKey) => {
   return {
     getGenres: () => fetchWithFallback('/genre/movie/list'),
     discoverMovie: (params) => fetchWithFallback('/discover/movie', params),
-    getMovie: (id) => fetchWithFallback(`/movie/${id}`, { 
-      append_to_response: 'images,credits,external_ids,watch/providers,videos,recommendations' 
+    getMovie: (id) => fetchWithFallback(`/movie/${id}`, {
+      append_to_response: 'images,credits,external_ids,watch/providers,videos,recommendations'
     }),
-    searchMovie: (query, page=1) => fetchWithFallback('/search/movie', { query, page }),
-    searchPerson: (query, page=1) => fetchWithFallback('/search/person', { query, page }),
+    searchMovie: (query, page = 1) => fetchWithFallback('/search/movie', { query, page }),
+    searchPerson: (query, page = 1) => fetchWithFallback('/search/person', { query, page }),
+    searchMulti: (query, page = 1) => fetchWithFallback('/search/multi', { query, page }),
     getPerson: (id) => fetchWithFallback(`/person/${id}`, { append_to_response: 'movie_credits,images' }),
-    
+
     getTrending: (timeWindow = 'day') => fetchWithFallback(`/trending/movie/${timeWindow}`),
-    getNowPlaying: (page=1) => fetchWithFallback('/movie/now_playing', { page }),
-    getUpcoming: (page=1) => fetchWithFallback('/movie/upcoming', { page, region: 'US' }),
-    
-    getTopRatedIndia: () => fetchWithFallback('/discover/movie', { 
+    getNowPlaying: (page = 1) => fetchWithFallback('/movie/now_playing', { page }),
+    getUpcoming: (page = 1) => fetchWithFallback('/movie/upcoming', { page, region: 'US' }),
+
+    getTopRatedIndia: () => fetchWithFallback('/discover/movie', {
       region: 'IN', sort_by: 'vote_average.desc', 'vote_count.gte': 200,
       'primary_release_date.gte': new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0]
     }),

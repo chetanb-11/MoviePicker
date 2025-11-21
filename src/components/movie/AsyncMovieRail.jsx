@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { WifiOff, RefreshCw, Plus } from 'lucide-react';
-import MovieGridCard from './MovieGridCard';
+import MovieCard from './MovieCard';
 
 const AsyncMovieRail = ({ title, icon: Icon, fetchFn, onMovieClick, watchlist, toggleWatchlist, seenHistory, markSeen, unmarkSeen }) => {
     const [movies, setMovies] = useState([]);
@@ -74,15 +74,14 @@ const AsyncMovieRail = ({ title, icon: Icon, fetchFn, onMovieClick, watchlist, t
                             {movies.map(m => {
                                 const isSeen = seenHistory.some(seen => typeof seen === 'object' ? seen.id === m.id : seen === m.id);
                                 return (
-                                    <MovieGridCard
+                                    <MovieCard
                                         key={m.id}
                                         movie={m}
                                         onClick={onMovieClick}
-                                        toggleWatchlist={toggleWatchlist}
+                                        onToggleWatchlist={toggleWatchlist}
                                         isWatchlisted={watchlist.some(w => w.id === m.id)}
-                                        toggleSeen={() => isSeen ? unmarkSeen(m.id) : markSeen(m)}
+                                        onToggleSeen={() => isSeen ? unmarkSeen(m.id) : markSeen(m)}
                                         isSeen={isSeen}
-                                        className="min-w-[160px] w-[160px] md:min-w-[200px] md:w-[200px]"
                                     />
                                 );
                             })}
